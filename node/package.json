@@ -1,0 +1,26 @@
+{
+  "name": "iflow-node",
+  "version": "1.0.0",
+  "description": "iFlow Node.js native modules - Complete desktop automation suite",
+  "main": "index.js",
+  "scripts": {
+    "test": "node benchmark.js",
+    "mcp": "node mcp-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "better-sqlite3": "^12.6.2",
+    "clipboardy": "^4.0.0",
+    "glob": "^10.3.0",
+    "screenshot-desktop": "^1.15.0",
+    "uuid": "^9.0.0"
+  },
+  "os": [
+    "win32",
+    "linux",
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
