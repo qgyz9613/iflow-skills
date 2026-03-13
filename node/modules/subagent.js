@@ -554,6 +554,208 @@ function autoDelegate(callback) {
   }
 }
 
+// ============================================================
+// 新增：生命周期钩子集成
+// ============================================================
+const hooks = require('./hooks');
+
+// 子代理生命周期事件
+const LIFECYCLE_EVENTS = {
+  SPAWNED: 'subagentSpawned',
+  ENDED: 'subagentEnded',
+  COMPLETED: 'completed',
+  ERROR: 'error',
+  KILLED: 'killed'
+};
+
+// 结束原因
+const END_REASONS = {
+  COMPLETED: 'completed',
+  ERROR: 'error',
+  KILLED: 'killed',
+  TIMEOUT: 'timeout',
+  CANCELLED: 'cancelled'
+};
+
+// ============================================================
+// 新增：子代理运行时注册表
+// ============================================================
+const subagentRuns = new Map();
+let sweeper = null;
+
+// 最大子代理深度
+const MAX_DEPTH = 5;
+
+// ============================================================
+// 新增：状态持久化和恢复
+// ============================================================
+function persistState() {
+  const statePath = path.join(SUBAGENT_DIR, 'state.json');
+  const state = {
+    runs: Array.from(subagentRuns.entries()).map(([id, run]) => ({
+      id,
+      planId: run.planId,
+      taskId: run.taskId,
+      status: run.status,
+      depth: run.depth,
+      createdAt: run.createdAt,
+      updatedAt: run.updatedAt
+    })),
+    persistedAt: new Date().toISOString()
+  };
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+
+function restoreState() {
+  const statePath = path.join(SUBAGENT_DIR, 'state.json');
+  if (fs.existsSync(statePath)) {
+    try {
+      const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+      for (const run of state.runs || []) {
+        if (run.status === 'running' || run.status === 'pending') {
+          run.status = 'restored';
+          run.restoredAt = new Date().toISOString();
+        }
+        subagentRuns.set(run.id, run);
+      }
+      console.log(`[SubAgent] 恢复了 ${subagentRuns.size} 个子代理状态`);
+    } catch (e) {
+      console.log(`[SubAgent] 状态恢复失败: ${e.message}`);
+    }
+  }
+}
+
+// 启动时恢复状态
+restoreState();
+
+// ============================================================
+// 新增：启动清理器
+// ============================================================
+function startSweeper() {
+  if (sweeper) return;
+  
+  sweeper = setInterval(() => {
+    const now = Date.now();
+    const timeout = 30 * 60 * 1000; // 30分钟超时
+    
+    for (const [id, run] of subagentRuns.entries()) {
+      if (run.status === 'running' || run.status === 'restored') {
+        const elapsed = now - new Date(run.updatedAt || run.createdAt).getTime();
+        if (elapsed > timeout) {
+          run.status = 'timeout';
+          run.endedAt = new Date().toISOString();
+          run.endReason = END_REASONS.TIMEOUT;
+          subagentRuns.set(id, run);
+          
+          // 触发钩子
+          hooks.trigger('subagentEnded', {
+            runId: id,
+            reason: END_REASONS.TIMEOUT,
+            elapsed
+          });
+        }
+      }
+    }
+    
+    persistState();
+  }, 60000); // 每分钟检查一次
+  
+  console.log('[SubAgent] 清理器已启动');
+}
+
+function stopSweeper() {
+  if (sweeper) {
+    clearInterval(sweeper);
+    sweeper = null;
+    console.log('[SubAgent] 清理器已停止');
+  }
+}
+
+// 注意：清理器不再自动启动，需要调用 startSweeper() 手动启动
+// 这是为了避免模块加载时创建定时器导致进程无法退出
+// startSweeper();
+
+// ============================================================
+// 新增：增强版委派（带钩子和状态管理）
+// ============================================================
+async function delegateWithLifecycle(taskId, options = {}) {
+  const start = Date.now();
+  
+  // 触发 before 钩子
+  await hooks.trigger('subagentSpawning', { taskId, options });
+  
+  try {
+    const result = delegate(taskId, options);
+    
+    if (result.status === 'ok') {
+      const runId = uuidv4();
+      const run = {
+        id: runId,
+        planId: result.planId,
+        taskId,
+        status: 'running',
+        depth: options.depth || 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+      subagentRuns.set(runId, run);
+      persistState();
+      
+      // 触发 spawned 钩子
+      await hooks.trigger('subagentSpawned', { runId, taskId, planId: result.planId });
+      
+      return { ...result, runId };
+    }
+    
+    return result;
+  } catch (e) {
+    await hooks.trigger('subagentEnded', { taskId, reason: END_REASONS.ERROR, error: e.message });
+    return { status: 'error', message: e.message, time: Date.now() - start };
+  }
+}
+
+// ============================================================
+// 新增：获取运行时状态
+// ============================================================
+function getRuntimeStatus() {
+  return {
+    activeRuns: Array.from(subagentRuns.entries())
+      .filter(([_, run]) => run.status === 'running')
+      .map(([id, run]) => ({ id, ...run })),
+    totalRuns: subagentRuns.size,
+    sweeperActive: sweeper !== null
+  };
+}
+
+// ============================================================
+// 新增：深度限制检查
+// ============================================================
+function checkDepthLimit(depth = 0) {
+  return depth < MAX_DEPTH;
+}
+
+// ============================================================
+// 新增：列出活动子代理
+// ============================================================
+function listActive() {
+  const start = Date.now();
+  
+  const active = Array.from(subagentRuns.entries())
+    .filter(([_, run]) => run.status === 'running' || run.status === 'restored')
+    .map(([id, run]) => ({
+      id,
+      taskId: run.taskId,
+      planId: run.planId,
+      depth: run.depth,
+      status: run.status,
+      createdAt: run.createdAt,
+      elapsed: Date.now() - new Date(run.createdAt).getTime()
+    }));
+  
+  return { status: 'ok', active, count: active.length, time: Date.now() - start };
+}
+
 module.exports = {
   plan,
   delegate,
@@ -565,5 +767,17 @@ module.exports = {
   cancel,
   templates,
   autoDelegate,
-  assessComplexity
+  assessComplexity,
+  // 新增
+  delegateWithLifecycle,
+  getRuntimeStatus,
+  listActive,
+  checkDepthLimit,
+  startSweeper,
+  stopSweeper,
+  persistState,
+  restoreState,
+  LIFECYCLE_EVENTS,
+  END_REASONS,
+  MAX_DEPTH
 };

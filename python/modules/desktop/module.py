@@ -481,7 +481,6 @@ def desktop_window_list() -> str:
         
         if code == 0:
             try:
-                import json
                 windows = json.loads(stdout)
                 if not isinstance(windows, list):
                     windows = [windows]

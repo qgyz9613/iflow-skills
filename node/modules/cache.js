@@ -14,6 +14,11 @@ if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 function get(key) {
   const start = Date.now();
   try {
+    // 如果 key 是对象，提取 key 字段（MCP 调用方式）
+    if (typeof key === 'object' && key !== null) {
+      key = key.key || null;
+    }
+
     const safeKey = sanitizeKey(key);
     const filePath = path.join(CACHE_DIR, `${safeKey}.json`);
     
@@ -39,6 +44,13 @@ function get(key) {
 function set(key, value, ttlSeconds = 3600) {
   const start = Date.now();
   try {
+    // 如果 key 是对象，提取 key、value 和 ttlSeconds 字段（MCP 调用方式）
+    if (typeof key === 'object' && key !== null) {
+      value = key.value;
+      ttlSeconds = key.ttlSeconds !== undefined ? key.ttlSeconds : ttlSeconds;
+      key = key.key;
+    }
+
     const safeKey = sanitizeKey(key);
     const filePath = path.join(CACHE_DIR, `${safeKey}.json`);
     

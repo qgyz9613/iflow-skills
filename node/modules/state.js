@@ -34,6 +34,11 @@ let state = loadState();
 function get(key) {
   const start = Date.now();
   try {
+    // 如果 key 是对象，提取 key 字段（MCP 调用方式）
+    if (typeof key === 'object' && key !== null) {
+      key = key.key || null;
+    }
+
     // 参数类型校验
     if (key === null || key === undefined) {
       return { status: 'ok', value: state, key: null, time: Date.now() - start };
@@ -63,6 +68,12 @@ function get(key) {
 function set(key, value) {
   const start = Date.now();
   try {
+    // 如果 key 是对象，提取 key 和 value 字段（MCP 调用方式）
+    if (typeof key === 'object' && key !== null) {
+      value = key.value;
+      key = key.key;
+    }
+
     // 参数类型校验
     if (key === null || key === undefined) {
       return { status: 'error', message: 'Key is required', time: Date.now() - start };

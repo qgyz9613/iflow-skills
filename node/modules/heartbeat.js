@@ -1,6 +1,6 @@
 /**
  * iFlow Heartbeat Module - 通用自主运行引擎
- * 三级技能加载系统：元数据 → SKILL.md → 资源
+ * 三级技能加载系统：元数据+SKILL.md+资源
  */
 
 const path = require('path');
@@ -9,6 +9,7 @@ const os = require('os');
 const http = require('http');
 const improve = require('./improve');
 const subagent = require('./subagent');
+const cronHelper = require('./heartbeat-cron');
 
 const HEARTBEAT_DIR = path.join(__dirname, '..', 'heartbeat-data');
 const SKILLS_DIR = path.join(os.homedir(), '.iflow', 'skills');
@@ -31,9 +32,9 @@ let skillRegistry = [
     config: {
       stopLoss: -0.03,
       takeProfit: 0.05,
-      panwatchUrl: 'http://localhost:8000',
+      panwatchUrl: 'http://192.168.100.1:8000',
       easythsUrl: 'http://localhost:7648',
-      token: 'YOUR_TOKEN_HERE'
+      token: 'YOUR_TOKEN_HERE'  # 替换为实际的token
     }
   },
   {
@@ -116,7 +117,7 @@ if (fs.existsSync(registryPath)) {
   try {
     const saved = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
     
-    // 合并逻辑：保留默认技能 + 更新已有技能配置 + 添加新技能
+    // 合并逻辑：保留默认技能+ 更新已有技能配置+ 添加新技能
     for (const savedSkill of saved) {
       const existingIndex = skillRegistry.findIndex(s => s.name === savedSkill.name);
       if (existingIndex >= 0) {
@@ -127,10 +128,10 @@ if (fs.existsSync(registryPath)) {
         skillRegistry.push(savedSkill);
       }
     }
-    
+
     // 保存合并后的完整配置
     fs.writeFileSync(registryPath, JSON.stringify(skillRegistry, null, 2));
-    console.error(`[Heartbeat] 加载技能配置: ${skillRegistry.length} 个技能 (已合并)`);
+    console.error(`[Heartbeat] 加载技能配置: ${skillRegistry.length} 个技能(已合并)`);
   } catch (e) {
     console.error(`[Heartbeat] 加载配置失败: ${e.message}`);
   }
@@ -212,9 +213,9 @@ const skillExecutors = {
     const config = skill.config;
     
     try {
-      // 1. 获取盯盘侠持仓（真实账户）- 仅用于分析，不执行交易
+      // 1. 获取盯盘侠持仓（真实账户） 仅用于分析，不执行交易
       const holdingsData = await httpRequest({
-        hostname: '192.168.100.216',
+        hostname: '192.168.100.1',
         port: 8000,
         path: '/api/portfolio/summary?include_quotes=true',
         method: 'GET',
@@ -272,7 +273,7 @@ const skillExecutors = {
       // 2. 获取模拟账户持仓 - 从easyths查询
       // 注意：模拟账户持股需要从同花顺资金股票中查询
       // 这里不执行任何卖出操作
-      
+
       // 记录建议到日志
       if (suggestions.length > 0) {
         const logPath = path.join(HEARTBEAT_DIR, 'trading-suggestions.json');
@@ -284,9 +285,9 @@ const skillExecutors = {
         fs.writeFileSync(logPath, JSON.stringify(log.slice(-100), null, 2));
       }
       
-      return { 
-        skill: skill.name, 
-        executed: true, 
+      return {
+        skill: skill.name,
+        executed: true,
         suggestions,  // 返回建议，不执行交易
         positionsAnalyzed: holdingsData.data?.accounts?.[0]?.positions?.length || 0,
         note: '仅提供建议，不执行真实账户交易'
@@ -384,15 +385,15 @@ const skillExecutors = {
     try {
       // 自动检查和委派待执行任务
       const result = subagent.autoDelegate();
-      
+
       // 获取当前活跃计划状态
       const status = subagent.status({});
-      
-      return { 
-        skill: skill.name, 
+
+      return {
+        skill: skill.name,
         executed: true,
         delegateResult: result,
-        activePlans: status.plans?.slice(0, 5)  // 最多显示5个
+        activePlans: status.plans?.slice(0, 5)  // 最多显示前5个
       };
       
     } catch (e) {
@@ -451,17 +452,17 @@ const skillExecutors = {
     try {
       const channel = require('./channel');
       const memory = require('./memory');
-      
+
       // 获取今日统计
       const stats = memory.stats();
-      
+
       // 生成日报
       const report = `📊 iFlow 日报 ${new Date().toLocaleDateString('zh-CN')}\n\n` +
-        `✅ 记忆条目: ${stats.total || 0}\n` +
+        `🧠 记忆条目: ${stats.total || 0}\n` +
         `📚 学习记录: ${stats.learnings || 0}\n` +
         `🔧 技能运行: ${skillRegistry.filter(s => s.lastTriggered).length}/${skillRegistry.length}\n` +
-        `⏰ 运行时间: ${Math.floor(process.uptime() / 3600)}小时`;
-      
+        `⏱️ 运行时间: ${Math.floor(process.uptime() / 3600)}小时`;
+
       // 发送到配置的渠道
       const results = [];
       for (const ch of skill.config.channels) {
@@ -471,27 +472,27 @@ const skillExecutors = {
         }
       }
       
-      return { 
-        skill: skill.name, 
+      return {
+        skill: skill.name,
         executed: true,
         report,
         channels: results
       };
-      
+
     } catch (e) {
       return { skill: skill.name, executed: false, error: e.message };
     }
   },
-  
+
   // 记忆归档技能
   'memory-archive': async (skill) => {
     try {
       const memory = require('./memory');
       const archiveDays = skill.config.archiveAfterDays || 30;
-      
+
       // 获取旧记忆
       const oldMemories = memory.list({ olderThan: archiveDays });
-      
+
       // 归档到文件
       const archiveDir = path.join(os.homedir(), '.iflow', 'memory', 'archive');
       if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
@@ -558,20 +559,38 @@ function startInterval(intervalMs = 60000, callback = null) {
       for (const skill of skillRegistry) {
         if (!skill.enabled) continue;
         
-        for (const trigger of skill.triggers) {
-          const checker = triggerCheckers[trigger];
-          if (checker && checker()) {
-            // Level 2: 触发时加载技能
-            const executor = skillExecutors[skill.name];
-            if (executor) {
-              const result = await executor(skill);
-              results.push(result);
-              
-              skill.lastTriggered = new Date().toISOString();
-              
-              if (callback) callback(result);
+        let shouldTrigger = false;
+        
+        // 检查 schedule 字段（支持 cron 表达式）
+        if (skill.schedule && skill.schedule.cron) {
+          const cronExpr = skill.schedule.cron;
+          const parsed = cronHelper.parseCronExpression(cronExpr);
+          if (parsed && cronHelper.matchCron(parsed, new Date())) {
+            shouldTrigger = true;
+          }
+        }
+        
+        // 检查传统 triggers
+        if (!shouldTrigger) {
+          for (const trigger of skill.triggers) {
+            const checker = triggerCheckers[trigger];
+            if (checker && checker()) {
+              shouldTrigger = true;
+              break;
             }
-            break;  // 一个触发器满足即可
+          }
+        }
+        
+        if (shouldTrigger) {
+          // Level 2: 触发时加载技能
+          const executor = skillExecutors[skill.name];
+          if (executor) {
+            const result = await executor(skill);
+            results.push(result);
+            
+            skill.lastTriggered = new Date().toISOString();
+            
+            if (callback) callback(result);
           }
         }
       }
@@ -787,7 +806,7 @@ async function getQuotes(symbols) {
   });
   
   return httpRequest({
-    hostname: '192.168.100.216',
+    hostname: '192.168.100.1',
     port: 8000,
     path: '/api/quotes/batch',
     method: 'POST',
@@ -804,7 +823,7 @@ async function getPanwatchHoldings() {
   const token = tradingSkill?.config?.token;
   
   return httpRequest({
-    hostname: '192.168.100.216',
+    hostname: '192.168.100.1',
     port: 8000,
     path: '/api/portfolio/summary?include_quotes=true',
     method: 'GET',
@@ -855,7 +874,7 @@ module.exports = {
   productivity,
   updateProductivity,
   
-  // 技能管理 (新增)
+  // 技能管理(新增)
   registerSkill,
   unregisterSkill,
   getSkills,
@@ -863,8 +882,7 @@ module.exports = {
   updateSkillConfig,
   triggerSkill,
   
-  // 兼容旧接口
-  setConfig,
+  // 兼容旧接口  setConfig,
   getConfig,
   getTradingLog,
   runAnalysis,
