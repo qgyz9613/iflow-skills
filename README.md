@@ -4,7 +4,7 @@ iFlow AI Agent 模块与技能集合
 
 ## 概述
 
-本项目包含 iFlow AI Agent 的核心模块和技能，提供完整的桌面自动化、浏览器控制、多代理协同、记忆系统、消息通道等功能。当前版本包含 **118个模块**，约 **927个工具**，支持高度可配置的自主代理系统。
+本项目包含 iFlow AI Agent 的核心模块和技能，提供完整的桌面自动化、浏览器控制、多代理协同、记忆系统、消息通道等功能。当前版本包含 **89个模块**，约 **950个工具**，支持高度可配置的自主代理系统。
 
 ## 快速开始
 
@@ -25,7 +25,7 @@ python python/mcp-server/server.py
 
 ## 模块列表
 
-### Node.js 核心模块（85个模块，约850个工具）
+### Node.js 核心模块（89个模块，约950个工具）
 
 #### 1. 核心架构
 | 模块 | 功能描述 |
@@ -82,6 +82,10 @@ python python/mcp-server/server.py
 |------|----------|
 | `summarize` | 内容摘要、批量处理、关键词提取 |
 | `context-engine` | 上下文管理、Token估算、自动压缩 |
+| `indicators` | 技术指标计算（MACD、KDJ、RSI、Bollinger Bands、MA、VOL等） |
+| `sector-rotation` | 板块轮动分析、主力资金流向、热点板块识别 |
+| `sentiment` | 情感分析、自动标注记忆情感倾向（看涨/看跌/中性） |
+| `data-aggregator` | 多数据源聚合（PostgreSQL、AKShare、东方财富API） |
 
 #### 8. 开发与部署
 | 模块 | 功能描述 |
@@ -253,6 +257,15 @@ MIT
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v2.1 (2026-03-14)
+- ✅ 新增4个股票分析模块（从85个扩展到89个）
+- ✅ 新增indicators模块 - 技术指标计算（MACD、KDJ、RSI、Bollinger Bands、MA、VOL等）
+- ✅ 新增sector-rotation模块 - 板块轮动分析、主力资金流向、热点板块识别
+- ✅ 新增sentiment模块 - 情感分析、自动标注记忆情感倾向（看涨/看跌/中性）
+- ✅ 新增data-aggregator模块 - 多数据源聚合（PostgreSQL、AKShare、东方财富API）
+- ✅ 整合A股数据库、实时行情数据源、机器学习模型
+- ✅ 支持CatBoost预测模型、板块轮动分析、情感分析
 
 ### v2.0 (2026-03-13)
 - ✅ 新增85个Node.js模块（从20个扩展到85个）
